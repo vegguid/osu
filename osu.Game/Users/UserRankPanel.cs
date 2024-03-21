@@ -8,9 +8,11 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Input.Events;
 using osu.Game.Online.API;
+using osu.Game.Online.API.Requests;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Overlays.Profile.Header.Components;
 using osu.Game.Resources.Localisation.Web;
+using osu.Game.Rulesets;
 using osuTK;
 
 namespace osu.Game.Users
@@ -26,9 +28,12 @@ namespace osu.Game.Users
 
         [Resolved]
         private IAPIProvider api { get; set; } = null!;
+        [Resolved]
+        private Bindable<RulesetInfo> currentRuleset { get; set; } = null!;
 
         private ProfileValueDisplay globalRankDisplay = null!;
         private ProfileValueDisplay countryRankDisplay = null!;
+        private GetUserRequest? userReq;
 
         private readonly IBindable<UserStatistics?> statistics = new Bindable<UserStatistics?>();
 
@@ -47,9 +52,22 @@ namespace osu.Game.Users
             statistics.BindTo(api.Statistics);
             statistics.BindValueChanged(stats =>
             {
-                globalRankDisplay.Content = stats.NewValue?.GlobalRank?.ToLocalisableString("\\##,##0") ?? "-";
-                countryRankDisplay.Content = stats.NewValue?.CountryRank?.ToLocalisableString("\\##,##0") ?? "-";
+                userReq = new GetUserRequest(api.LocalUser.Value.Id, currentRuleset.Value);
+                userReq.Success += u => userLoadComplete(u);
+                api.Queue(userReq);
+            }, false);
+            currentRuleset.BindValueChanged((ValueChangedEvent<RulesetInfo> value) =>
+            {
+                userReq = new GetUserRequest(api.LocalUser.Value.Id, value.NewValue);
+                userReq.Success += u => userLoadComplete(u);
+                api.Queue(userReq);
             }, true);
+        }
+
+        private void userLoadComplete(APIUser user)
+        {
+            countryRankDisplay.Content = user.Statistics.CountryRank?.ToLocalisableString("\\##,##0") ?? "-";
+            globalRankDisplay.Content = user.Statistics.GlobalRank?.ToLocalisableString("\\##,##0") ?? "-";
         }
 
         protected override Drawable CreateLayout()
